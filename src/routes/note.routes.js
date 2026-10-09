@@ -23,14 +23,14 @@ const router = Router();
 router.use(authMiddleware);
 
 /**
- * @description Get my notes (paginated ?page=&limit=)
+ * @description Get my notes (paginated ?page=&limit=, optional ?search=)
  * @route GET /api/notes
  * @access Private
  */
 router.get("/", getMyNotes);
 
 /**
- * @description Get everyone's notes, optional ?owner=userId
+ * @description Get everyone's notes, optional ?owner=userId and ?search=
  * @route GET /api/notes/all
  * @access Admin
  */

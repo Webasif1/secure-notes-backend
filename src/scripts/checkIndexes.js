@@ -36,6 +36,11 @@ const queries = {
   "admin all users": userModel.find().sort({ _id: -1 }).limit(10).explain(),
   "user by id": userModel.find({ _id: id }).explain(),
   "my notes": noteModel.find({ owner: id }).sort({ _id: -1 }).limit(10).explain(),
+  "my notes + search": noteModel
+    .find({ owner: id, $or: [{ title: /milk/i }, { content: /milk/i }] })
+    .sort({ _id: -1 })
+    .limit(10)
+    .explain(),
   "admin all notes": noteModel.find().sort({ _id: -1 }).limit(10).explain(),
   "single note": noteModel.find({ _id: id, owner: id }).explain(),
   "all posts": postModel.find().sort({ _id: -1 }).limit(10).explain(),

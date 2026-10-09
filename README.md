@@ -38,6 +38,8 @@ All indexes are declared with `schema.index()` in `src/models/*.models.js`. Only
 
 **Why sort by `_id` instead of `createdAt`?** ObjectIds grow over time, so `_id: -1` already means "newest first". It is also unique, so pagination is stable without a tie-breaker. That avoids a separate `createdAt` index.
 
+**Search (`?search=`) without an extra index.** Notes search looks in title and content with an escaped, case-insensitive regex. For "my notes" the query still runs on the `{ owner: 1, _id: -1 }` index and only checks the text of that user's notes, so a text index (an extra index the task does not require) is not added. Admin search over all notes / users is an admin-only tool and filters while walking the `_id` index.
+
 **Why `{ owner: 1, _id: -1 }` and not just `{ owner: 1 }`?** With equality on `owner` followed by the sort key, MongoDB reads the notes already in the right order and stops after `limit` documents. With `{ owner: 1 }` alone it would have to load all of that user's notes and sort them in memory.
 
 ### Proof
@@ -53,6 +55,7 @@ login (user by email)        PROJECTION_SIMPLE <- FETCH <- IXSCAN(email_1)
 admin all users              LIMIT <- PROJECTION_SIMPLE <- FETCH <- IXSCAN(_id_)
 user by id                   EXPRESS_IXSCAN(_id_)
 my notes                     LIMIT <- FETCH <- IXSCAN(owner_1__id_-1)
+my notes + search            LIMIT <- FETCH <- IXSCAN(owner_1__id_-1)
 admin all notes              LIMIT <- FETCH <- IXSCAN(_id_)
 single note                  FETCH <- IXSCAN(_id_)
 all posts                    LIMIT <- FETCH <- IXSCAN(_id_)
@@ -111,8 +114,8 @@ Base URL: `/api`. Every response has `message` and `success`, plus the data (`us
 ### Notes
 | Method | Path | Access |
 |---|---|---|
-| GET | `/notes?page&limit` | logged in: own notes |
-| GET | `/notes/all?page&limit&owner?` | admin: everyone's notes |
+| GET | `/notes?page&limit&search?` | logged in: own notes |
+| GET | `/notes/all?page&limit&owner?&search?` | admin: everyone's notes |
 | POST | `/notes` | logged in: `{ title, content? }` |
 | GET | `/notes/:id` | owner or admin |
 | PATCH | `/notes/:id` | owner |
@@ -122,7 +125,7 @@ Base URL: `/api`. Every response has `message` and `success`, plus the data (`us
 | Method | Path | Access |
 |---|---|---|
 | GET | `/users/interests?page&limit` | logged in (Scenario 1) |
-| GET | `/users?page&limit` | admin |
+| GET | `/users?page&limit&search?` | admin (search name / email) |
 | POST | `/users` | admin: `{ name, email, password, role?, interests? }` |
 | GET | `/users/:id` | admin |
 | PATCH | `/users/:id` | admin |
@@ -172,6 +175,6 @@ src/
   validator/     express-validator rules
   controllers/   auth, note, user (+ Scenario 1), post (+ Scenario 2)
   routes/        auth, note, user, post routers
-  utils/         pagination, token
+  utils/         pagination, token, search
   scripts/       seedAdmin.js, checkIndexes.js
 ```
