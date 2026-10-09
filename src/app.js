@@ -1,39 +1,42 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import { env } from './config/env.js';
-import authRoutes from './routes/authRoutes.js';
-import noteRoutes from './routes/noteRoutes.js';
-import userRoutes from './routes/userRoutes.js';
-import postRoutes from './routes/postRoutes.js';
-import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
+import express from "express";
+import cookieParser from "cookie-parser";
+import cors from "cors";
+import morgan from "morgan";
+import authRouter from "./routes/auth.routes.js";
+import noteRouter from "./routes/note.routes.js";
+import userRouter from "./routes/user.routes.js";
+import postRouter from "./routes/post.routes.js";
+import { config } from "./config/config.js";
 
-export const app = express();
+const app = express();
 
-app.set('trust proxy', 1); // Render / Vercel sit behind a proxy (needed for rate limiting)
-app.use(helmet());
+app.set("trust proxy", 1);
+app.use(morgan("dev"));
 app.use(
   cors({
-    origin(origin, callback) {
-      // Allow non-browser clients (Postman, curl) and the configured frontends.
-      if (!origin || env.clientUrls.includes(origin.replace(/\/$/, ''))) return callback(null, true);
-      callback(null, false);
-    },
-  })
+    origin: config.CLIENT_URL.split(",").map((url) => url.trim()),
+    credentials: true,
+  }),
 );
-app.use(express.json({ limit: '100kb' }));
-if (env.nodeEnv !== 'test') app.use(morgan(env.nodeEnv === 'production' ? 'tiny' : 'dev'));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-app.get('/', (_req, res) => {
-  res.json({ success: true, message: 'SecureNotes API is running', docs: '/api/health' });
+app.get("/", (_req, res) => {
+  res.send("The server is ok");
 });
-app.get('/api/health', (_req, res) => res.json({ success: true, status: 'ok' }));
 
-app.use('/api/auth', authRoutes);
-app.use('/api/notes', noteRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/posts', postRoutes);
+app.use("/api/auth", authRouter);
+app.use("/api/notes", noteRouter);
+app.use("/api/users", userRouter);
+app.use("/api/posts", postRouter);
 
-app.use(notFoundHandler);
-app.use(errorHandler);
+app.use((req, res) => {
+  res.status(404).json({
+    message: "Route not found",
+    success: false,
+    error: "Not found",
+  });
+});
+
+export default app;

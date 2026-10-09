@@ -2,7 +2,7 @@
 
 REST API for a secure note-taking app, with JWT authentication, role-based access control (user / admin), paginated lists, MongoDB indexes and aggregation pipelines.
 
-**Stack:** Node.js · Express 5 · MongoDB · Mongoose · JWT · bcrypt
+**Stack:** Node.js · Express 5 · MongoDB · Mongoose · JWT · bcrypt · express-validator
 
 - Frontend repo: `secure-notes-frontend`
 - Live API: _add your Render URL here_
@@ -16,17 +16,17 @@ REST API for a secure note-taking app, with JWT authentication, role-based acces
 | **User** | Register / log in, create, update, delete and list **own** notes, write public posts, edit own profile & interests |
 | **Admin** | Everything a user can, plus **manage users** (list, add, update, remove) and **view everyone's notes** |
 
-- Passwords hashed with **bcrypt** (12 rounds), never returned by the API (`select: false` + `toJSON` transform).
-- **JWT** in `Authorization: Bearer <token>`. The user is reloaded on every request, so a deleted user or a changed role takes effect immediately.
-- Public sign-up always creates a `user`. Admins are created by another admin or with `npm run seed:admin`.
-- Input validation with **zod**, `mongoose.set('sanitizeFilter', true)` against NoSQL injection, **helmet**, CORS allow-list, rate limit on login/register.
+- Passwords hashed with **bcrypt** in a `pre("save")` hook, never returned by the API (`select: false`).
+- **JWT** sent as an httpOnly cookie **and** in the response body. The auth middleware accepts the cookie or `Authorization: Bearer <token>`. The user is loaded again from the DB on every request, so a deleted user or a changed role takes effect immediately.
+- Public register always creates a `user`. Admins are created by another admin or with `npm run seed:admin`.
+- Request validation with **express-validator**, plus `mongoose.set("sanitizeFilter", true)` against NoSQL injection.
 - **Pagination** on every list endpoint: `?page=1&limit=10` (max 100).
 
 ---
 
 ## Indexing strategy
 
-All indexes are declared with `schema.index()` in `src/models/`. Only indexes that a real query needs are created. Anything that filters or sorts by `_id` uses MongoDB's built-in `_id` index, so no extra index is added for it.
+All indexes are declared with `schema.index()` in `src/models/*.models.js`. Only indexes that a real query needs are created. Anything that filters or sorts by `_id` uses MongoDB's built-in `_id` index, so no extra index is added for it.
 
 | Collection | Index | Used by |
 |---|---|---|
@@ -49,15 +49,15 @@ users: {"_id":1}  {"email":1}  {"interests":1}
 notes: {"_id":1}  {"owner":1,"_id":-1}
 posts: {"_id":1}  {"author":1,"_id":-1}
 
-login (users by email)           PROJECTION_SIMPLE <- FETCH <- IXSCAN(email_1)
-admin list users                 LIMIT <- PROJECTION_SIMPLE <- FETCH <- IXSCAN(_id_)
-user by id                       EXPRESS_IXSCAN(_id_)
-my notes                         LIMIT <- FETCH <- IXSCAN(owner_1__id_-1)
-admin all notes                  LIMIT <- FETCH <- IXSCAN(_id_)
-note by id + owner               FETCH <- IXSCAN(_id_)
-posts feed                       LIMIT <- FETCH <- IXSCAN(_id_)
-posts of user ($lookup side)     LIMIT <- FETCH <- IXSCAN(author_1__id_-1)
-interests aggregation $match     PROJECTION_SIMPLE <- FETCH <- IXSCAN(interests_1)
+login (user by email)        PROJECTION_SIMPLE <- FETCH <- IXSCAN(email_1)
+admin all users              LIMIT <- PROJECTION_SIMPLE <- FETCH <- IXSCAN(_id_)
+user by id                   EXPRESS_IXSCAN(_id_)
+my notes                     LIMIT <- FETCH <- IXSCAN(owner_1__id_-1)
+admin all notes              LIMIT <- FETCH <- IXSCAN(_id_)
+single note                  FETCH <- IXSCAN(_id_)
+all posts                    LIMIT <- FETCH <- IXSCAN(_id_)
+posts of user ($lookup)      LIMIT <- FETCH <- IXSCAN(author_1__id_-1)
+interests aggregation        PROJECTION_SIMPLE <- FETCH <- IXSCAN(interests_1)
 ```
 
 No `COLLSCAN` and no in-memory `SORT` stage. `explain('executionStats')` on the scenario 2 pipeline also reports `indexesUsed: ['author_1__id_-1']` and `collectionScans: 0` for the `$lookup`.
@@ -67,9 +67,9 @@ No `COLLSCAN` and no in-memory `SORT` stage. `explain('executionStats')` on the 
 ## Aggregation tasks
 
 ### Scenario 1: users grouped by interests
-`GET /api/users/interests` → `src/controllers/userController.js` → `groupByInterests`
+`GET /api/users/interests` → `src/controllers/user.controller.js` → `getUsersByInterests`
 
-Exactly **one** `User.aggregate()` call:
+Exactly **one** `userModel.aggregate()` call:
 
 1. `$match { interests: { $type: 'string' } }`: users with at least one interest. Uses the `{ interests: 1 }` multikey index, so users without interests are never read.
 2. `$project` keeps only `name` and `interests`.
@@ -79,12 +79,13 @@ Exactly **one** `User.aggregate()` call:
 6. `$facet` returns the requested page **and** the total count in the same call.
 
 ```json
-{ "data": [ { "interest": "chess", "count": 3, "users": [ { "_id": "...", "name": "Ali" } ] } ],
-  "meta": { "page": 1, "limit": 10, "total": 3, "totalPages": 1 } }
+{ "message": "Users grouped by interests", "success": true,
+  "groups": [ { "interest": "chess", "count": 3, "users": [ { "_id": "...", "name": "Ali" } ] } ],
+  "pagination": { "page": 1, "limit": 10, "total": 3, "totalPages": 1 } }
 ```
 
 ### Scenario 2: all posts of a user (`$lookup`)
-`GET /api/posts/user/:userId` → `src/controllers/postController.js` → `postsByUser`
+`GET /api/posts/user/:userId` → `src/controllers/post.controller.js` → `getPostsByUser`
 
 One pipeline on `users`:
 
@@ -96,15 +97,16 @@ One pipeline on `users`:
 
 ## API reference
 
-Base URL: `/api`. Every response looks like `{ success, data, meta? }` or `{ success: false, message, details? }`.
+Base URL: `/api`. Every response has `message` and `success`, plus the data (`user`, `notes`, `note`, `users`, `groups`, `posts`...) and `pagination` on lists. Errors look like `{ message, success: false, error }`, and validation errors also include `errors`.
 
 ### Auth
 | Method | Path | Access | Body |
 |---|---|---|---|
 | POST | `/auth/register` | public | `{ name, email, password, interests? }` |
-| POST | `/auth/login` | public | `{ email, password }` → `{ token, user }` |
-| GET | `/auth/me` | logged in | |
-| PATCH | `/auth/me` | logged in | `{ name?, interests?, password? }` |
+| POST | `/auth/login` | public | `{ email, password }` → `{ token, user }` + cookie |
+| POST | `/auth/logout` | public | clears the cookie |
+| GET | `/auth/get-me` | logged in | |
+| PATCH | `/auth/get-me` | logged in | `{ name?, interests?, password? }` |
 
 ### Notes
 | Method | Path | Access |
@@ -147,7 +149,7 @@ cd secure-notes-backend
 npm install
 cp .env.example .env        # then edit MONGO_URI and JWT_SECRET
 npm run seed:admin          # creates the admin from ADMIN_EMAIL / ADMIN_PASSWORD
-npm run dev                 # http://localhost:5000
+npm run dev                 # http://localhost:3000
 npm run check:indexes       # optional: print indexes + query plans
 ```
 
@@ -161,12 +163,15 @@ npm run check:indexes       # optional: print indexes + query plans
 ## Project structure
 
 ```
+server.js
 src/
-  config/       env + database connection
-  models/       User, Note, Post (+ schema.index definitions)
-  middleware/   authenticate / authorize, error handler
-  controllers/  auth, notes, users (+ Scenario 1), posts (+ Scenario 2)
-  routes/       Express routers
-  utils/        pagination, validation, JWT, errors
-  scripts/      seedAdmin, checkIndexes
+  app.js
+  config/        config.js (env), database.js
+  models/        user.models.js, note.models.js, post.models.js (+ schema.index)
+  middleware/    auth.middleware.js (authMiddleware, authenticateAdmin)
+  validator/     express-validator rules
+  controllers/   auth, note, user (+ Scenario 1), post (+ Scenario 2)
+  routes/        auth, note, user, post routers
+  utils/         pagination, token
+  scripts/       seedAdmin.js, checkIndexes.js
 ```

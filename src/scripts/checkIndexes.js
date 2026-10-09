@@ -1,56 +1,62 @@
-// Prints the indexes of every collection and the winning query plan of the
-// main queries, to prove each one is served by an index (IXSCAN), not a
-// full collection scan (COLLSCAN). Usage: `npm run check:indexes`
-import mongoose from 'mongoose';
-import { connectDB } from '../config/db.js';
-import { User } from '../models/User.js';
-import { Note } from '../models/Note.js';
-import { Post } from '../models/Post.js';
+// prints all indexes and the query plan of every main query
+// IXSCAN = index used, COLLSCAN = full collection scan (bad)
+// run: npm run check:indexes
+import mongoose from "mongoose";
+import connectToDB from "../config/database.js";
+import userModel from "../models/user.models.js";
+import noteModel from "../models/note.models.js";
+import postModel from "../models/post.models.js";
 
-await connectDB();
+await connectToDB();
 
-for (const model of [User, Note, Post]) {
+for (const model of [userModel, noteModel, postModel]) {
   const indexes = await model.collection.indexes();
-  console.log(`\n${model.collection.name}:`, indexes.map((i) => JSON.stringify(i.key)).join('  '));
+  console.log(
+    `${model.collection.name}:`,
+    indexes.map((index) => JSON.stringify(index.key)).join("  "),
+  );
 }
 
-function stages(plan, out = []) {
-  if (!plan) return out;
-  out.push(plan.stage + (plan.indexName ? `(${plan.indexName})` : ''));
-  if (plan.inputStage) stages(plan.inputStage, out);
-  (plan.inputStages || []).forEach((p) => stages(p, out));
-  return out;
+function getStages(plan, stages = []) {
+  if (!plan) return stages;
+  stages.push(plan.stage + (plan.indexName ? `(${plan.indexName})` : ""));
+  if (plan.inputStage) getStages(plan.inputStage, stages);
+  (plan.inputStages || []).forEach((p) => getStages(p, stages));
+  return stages;
 }
 
-function findPlan(explain) {
+function getWinningPlan(explain) {
   if (explain.queryPlanner) return explain.queryPlanner.winningPlan;
-  const cursor = explain.stages?.[0]?.$cursor;
-  if (cursor) return cursor.queryPlanner.winningPlan;
-  return null;
+  return explain.stages[0].$cursor.queryPlanner.winningPlan;
 }
 
 const id = new mongoose.Types.ObjectId();
-const checks = {
-  'login (users by email)': User.find({ email: 'a@b.c' }).explain(),
-  'admin list users': User.find().sort({ _id: -1 }).limit(10).explain(),
-  'user by id': User.find({ _id: id }).explain(),
-  'my notes': Note.find({ owner: id }).sort({ _id: -1 }).limit(10).explain(),
-  'admin all notes': Note.find().sort({ _id: -1 }).limit(10).explain(),
-  'note by id + owner': Note.find({ _id: id, owner: id }).explain(),
-  'posts feed': Post.find().sort({ _id: -1 }).limit(10).explain(),
-  'posts of user ($lookup side)': Post.find({ author: id }).sort({ _id: -1 }).limit(10).explain(),
-  'interests aggregation $match': User.aggregate([
-    { $match: { interests: { $type: 'string' } } },
-    { $unwind: '$interests' },
-    { $group: { _id: '$interests', n: { $sum: 1 } } },
-  ]).explain(),
+const queries = {
+  "login (user by email)": userModel.find({ email: "a@b.com" }).explain(),
+  "admin all users": userModel.find().sort({ _id: -1 }).limit(10).explain(),
+  "user by id": userModel.find({ _id: id }).explain(),
+  "my notes": noteModel.find({ owner: id }).sort({ _id: -1 }).limit(10).explain(),
+  "admin all notes": noteModel.find().sort({ _id: -1 }).limit(10).explain(),
+  "single note": noteModel.find({ _id: id, owner: id }).explain(),
+  "all posts": postModel.find().sort({ _id: -1 }).limit(10).explain(),
+  "posts of user ($lookup)": postModel
+    .find({ author: id })
+    .sort({ _id: -1 })
+    .limit(10)
+    .explain(),
+  "interests aggregation": userModel
+    .aggregate([
+      { $match: { interests: { $type: "string" } } },
+      { $unwind: "$interests" },
+      { $group: { _id: "$interests", count: { $sum: 1 } } },
+    ])
+    .explain(),
 };
 
-console.log('\nQuery plans:');
-for (const [name, promise] of Object.entries(checks)) {
-  const plan = findPlan(await promise);
-  const s = plan ? stages(plan.queryPlan || plan) : ['(see raw explain)'];
-  console.log(`  ${name.padEnd(32)} ${s.join(' <- ')}`);
+console.log("\nQuery plans:");
+for (const [name, explainPromise] of Object.entries(queries)) {
+  const plan = getWinningPlan(await explainPromise);
+  console.log(`  ${name.padEnd(28)} ${getStages(plan.queryPlan || plan).join(" <- ")}`);
 }
 
 await mongoose.disconnect();
