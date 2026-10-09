@@ -1,0 +1,20 @@
+# Render Blueprint: New > Blueprint > pick this repo. Fill the secret env vars in the dashboard.
+services:
+  - type: web
+    name: secure-notes-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      - key: CLIENT_URL
+        sync: false
