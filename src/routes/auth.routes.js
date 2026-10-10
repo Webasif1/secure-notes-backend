@@ -1,16 +1,11 @@
 import { Router } from "express";
-import {
-  validateRegister,
-  validateLogin,
-  validateUpdateMe,
-} from "../validator/auth.validator.js";
+import { validateRegister, validateLogin } from "../validator/auth.validator.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 import {
   registerController,
   loginController,
   logoutController,
   getMeController,
-  updateMeController,
 } from "../controllers/auth.controller.js";
 
 const authRouter = Router();
@@ -42,12 +37,5 @@ authRouter.post("/logout", logoutController);
  * @access Private
  */
 authRouter.get("/get-me", authMiddleware, getMeController);
-
-/**
- * @description Update own name, interests or password
- * @route PATCH /api/auth/get-me
- * @access Private
- */
-authRouter.patch("/get-me", authMiddleware, validateUpdateMe, updateMeController);
 
 export default authRouter;

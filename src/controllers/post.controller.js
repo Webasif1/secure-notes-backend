@@ -30,30 +30,6 @@ export async function getAllPosts(req, res) {
   }
 }
 
-export async function getSinglePost(req, res) {
-  try {
-    const post = await postModel
-      .findById(req.params.id)
-      .populate("author", "name");
-
-    if (!post) {
-      return res.status(404).json({
-        message: "Post not found",
-        success: false,
-        error: "Not found",
-      });
-    }
-
-    return res.status(200).json({
-      message: "Post fetched successfully",
-      success: true,
-      post,
-    });
-  } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-}
 
 export async function createPost(req, res) {
   const { title, body } = req.body;
@@ -76,32 +52,6 @@ export async function createPost(req, res) {
   }
 }
 
-// author or admin can delete
-export async function deletePost(req, res) {
-  const { id } = req.params;
-
-  try {
-    const filter =
-      req.user.role === "admin" ? { _id: id } : { _id: id, author: req.user._id };
-    const post = await postModel.findOneAndDelete(filter);
-
-    if (!post) {
-      return res.status(404).json({
-        message: "Post not found",
-        success: false,
-        error: "Not found",
-      });
-    }
-
-    return res.status(200).json({
-      message: "Post deleted successfully",
-      success: true,
-    });
-  } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-}
 
 /**
  * Scenario 2: all posts of one user

@@ -13,7 +13,7 @@ REST API for a secure note-taking app, with JWT authentication, role-based acces
 
 | Role | Can do |
 |---|---|
-| **User** | Register / log in, create, update, delete and list **own** notes, write public posts, edit own profile & interests |
+| **User** | Register / log in, create, update, delete and list **own** notes, write public posts |
 | **Admin** | Everything a user can, plus **manage users** (list, add, update, remove) and **view everyone's notes** |
 
 - Passwords hashed with **bcrypt** in a `pre("save")` hook, never returned by the API (`select: false`).
@@ -32,13 +32,11 @@ All indexes are declared with `schema.index()` in `src/models/*.models.js`. Only
 |---|---|---|
 | users | `{ email: 1 }` **unique** | Login / register lookup by email, and one account per email |
 | users | `{ interests: 1 }` (multikey) | Scenario 1: `$match` stage of the group-by-interests aggregation |
-| notes | `{ owner: 1, _id: -1 }` | "My notes" list (filter by owner + newest first + pagination + count), admin "notes of one user", deleting a user's notes |
+| notes | `{ owner: 1, _id: -1 }` | "My notes" list (filter by owner + newest first + pagination + count), deleting a user's notes |
 | posts | `{ author: 1, _id: -1 }` | Scenario 2: `$lookup` posts by author newest first, deleting a user's posts |
 | *(built-in)* | `{ _id: 1 }` | Get user / note / post by id, admin "all users", admin "all notes", public posts feed (all sorted by `_id`) |
 
 **Why sort by `_id` instead of `createdAt`?** ObjectIds grow over time, so `_id: -1` already means "newest first". It is also unique, so pagination is stable without a tie-breaker. That avoids a separate `createdAt` index.
-
-**Search (`?search=`) without an extra index.** Notes search looks in title and content with an escaped, case-insensitive regex. For "my notes" the query still runs on the `{ owner: 1, _id: -1 }` index and only checks the text of that user's notes, so a text index (an extra index the task does not require) is not added. Admin search over all notes / users is an admin-only tool and filters while walking the `_id` index.
 
 **Why `{ owner: 1, _id: -1 }` and not just `{ owner: 1 }`?** With equality on `owner` followed by the sort key, MongoDB reads the notes already in the right order and stops after `limit` documents. With `{ owner: 1 }` alone it would have to load all of that user's notes and sort them in memory.
 
@@ -55,7 +53,6 @@ login (user by email)        PROJECTION_SIMPLE <- FETCH <- IXSCAN(email_1)
 admin all users              LIMIT <- PROJECTION_SIMPLE <- FETCH <- IXSCAN(_id_)
 user by id                   EXPRESS_IXSCAN(_id_)
 my notes                     LIMIT <- FETCH <- IXSCAN(owner_1__id_-1)
-my notes + search            LIMIT <- FETCH <- IXSCAN(owner_1__id_-1)
 admin all notes              LIMIT <- FETCH <- IXSCAN(_id_)
 single note                  FETCH <- IXSCAN(_id_)
 all posts                    LIMIT <- FETCH <- IXSCAN(_id_)
@@ -109,13 +106,12 @@ Base URL: `/api`. Every response has `message` and `success`, plus the data (`us
 | POST | `/auth/login` | public | `{ email, password }` → `{ token, user }` + cookie |
 | POST | `/auth/logout` | public | clears the cookie |
 | GET | `/auth/get-me` | logged in | |
-| PATCH | `/auth/get-me` | logged in | `{ name?, interests?, password? }` |
 
 ### Notes
 | Method | Path | Access |
 |---|---|---|
-| GET | `/notes?page&limit&search?` | logged in: own notes |
-| GET | `/notes/all?page&limit&owner?&search?` | admin: everyone's notes |
+| GET | `/notes?page&limit` | logged in: own notes |
+| GET | `/notes/all?page&limit` | admin: everyone's notes |
 | POST | `/notes` | logged in: `{ title, content? }` |
 | GET | `/notes/:id` | owner or admin |
 | PATCH | `/notes/:id` | owner |
@@ -125,7 +121,7 @@ Base URL: `/api`. Every response has `message` and `success`, plus the data (`us
 | Method | Path | Access |
 |---|---|---|
 | GET | `/users/interests?page&limit` | logged in (Scenario 1) |
-| GET | `/users?page&limit&search?` | admin (search name / email) |
+| GET | `/users?page&limit` | admin |
 | POST | `/users` | admin: `{ name, email, password, role?, interests? }` |
 | GET | `/users/:id` | admin |
 | PATCH | `/users/:id` | admin |
@@ -136,9 +132,7 @@ Base URL: `/api`. Every response has `message` and `success`, plus the data (`us
 |---|---|---|
 | GET | `/posts?page&limit` | public feed |
 | GET | `/posts/user/:userId?page&limit` | public (Scenario 2) |
-| GET | `/posts/:id` | public |
 | POST | `/posts` | logged in: `{ title, body }` |
-| DELETE | `/posts/:id` | author or admin |
 
 ---
 
@@ -175,6 +169,6 @@ src/
   validator/     express-validator rules
   controllers/   auth, note, user (+ Scenario 1), post (+ Scenario 2)
   routes/        auth, note, user, post routers
-  utils/         pagination, token, search
+  utils/         pagination, token
   scripts/       seedAdmin.js, checkIndexes.js
 ```

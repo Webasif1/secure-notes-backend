@@ -14,7 +14,6 @@ import {
 import {
   validateCreateNote,
   validateUpdateNote,
-  validateOwnerQuery,
 } from "../validator/note.validator.js";
 import { validateId } from "../validator/validate.js";
 
@@ -23,18 +22,18 @@ const router = Router();
 router.use(authMiddleware);
 
 /**
- * @description Get my notes (paginated ?page=&limit=, optional ?search=)
+ * @description Get my notes (paginated ?page=&limit=)
  * @route GET /api/notes
  * @access Private
  */
 router.get("/", getMyNotes);
 
 /**
- * @description Get everyone's notes, optional ?owner=userId and ?search=
+ * @description Get everyone's notes (paginated)
  * @route GET /api/notes/all
  * @access Admin
  */
-router.get("/all", authenticateAdmin, validateOwnerQuery, getAllNotes);
+router.get("/all", authenticateAdmin, getAllNotes);
 
 /**
  * @description Create note

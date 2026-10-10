@@ -1,13 +1,6 @@
 import noteModel from "../models/note.models.js";
 import { getPagination, paginationInfo } from "../utils/pagination.js";
-import { searchRegex } from "../utils/search.js";
 
-// ?search= looks in title and content
-function addSearch(filter, search) {
-  const regex = searchRegex(search);
-  if (regex) filter.$or = [{ title: regex }, { content: regex }];
-  return filter;
-}
 
 async function findNotes(filter, query) {
   const pagination = getPagination(query);
@@ -28,15 +21,13 @@ async function findNotes(filter, query) {
 }
 
 /**
- * my notes, optional ?search=
+ * my notes
  * index: { owner: 1, _id: -1 }
- * with search mongo still walks only this user's notes on the owner index
- * and checks the text on them, so no extra (text) index is needed
  */
 export async function getMyNotes(req, res) {
   try {
     const { notes, pagination } = await findNotes(
-      addSearch({ owner: req.user._id }, req.query.search),
+      { owner: req.user._id },
       req.query,
     );
 
@@ -53,16 +44,12 @@ export async function getMyNotes(req, res) {
 }
 
 /**
- * admin: everyone's notes, can filter with ?owner=userId and ?search=
- * no filter -> _id index, with owner -> { owner: 1, _id: -1 } index
+ * admin: everyone's notes, newest first
+ * index: default _id index
  */
 export async function getAllNotes(req, res) {
   try {
-    const filter = addSearch(
-      req.query.owner ? { owner: req.query.owner } : {},
-      req.query.search,
-    );
-    const { notes, pagination } = await findNotes(filter, req.query);
+    const { notes, pagination } = await findNotes({}, req.query);
 
     return res.status(200).json({
       message: "All notes fetched successfully",

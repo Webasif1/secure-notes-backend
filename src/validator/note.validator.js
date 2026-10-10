@@ -1,4 +1,4 @@
-import { body, query } from "express-validator";
+import { body } from "express-validator";
 import { validateRequest } from "./validate.js";
 
 export const validateCreateNote = [
@@ -15,10 +15,5 @@ export const validateUpdateNote = [
     .notEmpty()
     .withMessage("Title can not be empty"),
   body("content").optional().isString(),
-  validateRequest,
-];
-
-export const validateOwnerQuery = [
-  query("owner").optional().isMongoId().withMessage("Invalid owner id"),
   validateRequest,
 ];

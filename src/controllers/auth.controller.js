@@ -71,29 +71,3 @@ export async function getMeController(req, res) {
     user: req.user,
   });
 }
-
-export async function updateMeController(req, res) {
-  const { name, interests, password } = req.body;
-
-  try {
-    const user = req.user;
-    if (name !== undefined) user.name = name;
-    if (interests !== undefined) user.interests = interests;
-    if (password !== undefined) user.password = password;
-
-    // save() so the pre save hook hashes the new password
-    await user.save();
-
-    const updatedUser = user.toObject();
-    delete updatedUser.password;
-
-    return res.status(200).json({
-      message: "Profile updated successfully",
-      success: true,
-      user: updatedUser,
-    });
-  } catch (err) {
-    console.log(err);
-    return res.status(500).json({ message: "Server error" });
-  }
-}

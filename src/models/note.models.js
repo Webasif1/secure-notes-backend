@@ -28,7 +28,7 @@ const noteSchema = new mongoose.Schema(
  *    owner is the filter and _id is the sort, so mongo reads the notes
  *    already sorted and stops after "limit" docs (no in-memory sort)
  *  - countDocuments({ owner }) for pagination
- *  - admin notes of one user (?owner=) and deleteMany({ owner })
+ *  - deleteMany({ owner }) when admin deletes a user
  *
  * No other index needed:
  *  - get / update / delete one note -> { _id } or { _id, owner }, _id index

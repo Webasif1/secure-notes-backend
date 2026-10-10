@@ -32,7 +32,7 @@ router.get("/interests", getUsersByInterests);
 router.use(authenticateAdmin);
 
 /**
- * @description Get all users (paginated, optional ?search= on name/email)
+ * @description Get all users (paginated)
  * @route GET /api/users
  * @access Admin
  */

@@ -2,24 +2,19 @@ import userModel from "../models/user.models.js";
 import noteModel from "../models/note.models.js";
 import postModel from "../models/post.models.js";
 import { getPagination, paginationInfo } from "../utils/pagination.js";
-import { searchRegex } from "../utils/search.js";
 
-// admin: all users, newest first (default _id index), optional ?search= on name/email
+// admin: all users, newest first (default _id index)
 export async function getAllUsers(req, res) {
   const pagination = getPagination(req.query);
-  const regex = searchRegex(req.query.search);
-  const filter = regex ? { $or: [{ name: regex }, { email: regex }] } : {};
 
   try {
     const [users, total] = await Promise.all([
       userModel
-        .find(filter)
+        .find()
         .sort({ _id: -1 })
         .skip(pagination.skip)
         .limit(pagination.limit),
-      regex
-        ? userModel.countDocuments(filter)
-        : userModel.estimatedDocumentCount(),
+      userModel.estimatedDocumentCount(),
     ]);
 
     return res.status(200).json({

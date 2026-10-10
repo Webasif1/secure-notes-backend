@@ -29,7 +29,7 @@ const postSchema = new mongoose.Schema(
  *  - deleteMany({ author }) when admin deletes a user
  *
  * No other index needed:
- *  - all posts feed (sorted by _id) and get one post use the _id index
+ *  - all posts feed (sorted by _id) uses the _id index
  */
 postSchema.index({ author: 1, _id: -1 });
 
