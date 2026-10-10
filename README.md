@@ -120,7 +120,7 @@ Base URL: `/api`. Every response has `message` and `success`, plus the data (`us
 ### Users
 | Method | Path | Access |
 |---|---|---|
-| GET | `/users/interests?page&limit` | logged in (Scenario 1) |
+| GET | `/users/interests?page&limit` | admin (Scenario 1) |
 | GET | `/users?page&limit` | admin |
 | POST | `/users` | admin: `{ name, email, password, role?, interests? }` |
 | GET | `/users/:id` | admin |

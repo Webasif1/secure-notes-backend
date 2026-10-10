@@ -19,17 +19,15 @@ import { validateId } from "../validator/validate.js";
 
 const router = Router();
 
-router.use(authMiddleware);
+// every user route is admin only
+router.use(authMiddleware, authenticateAdmin);
 
 /**
  * @description Users grouped by interests (aggregation scenario 1)
  * @route GET /api/users/interests
- * @access Private
+ * @access Admin
  */
 router.get("/interests", getUsersByInterests);
-
-// everything below is admin only
-router.use(authenticateAdmin);
 
 /**
  * @description Get all users (paginated)
